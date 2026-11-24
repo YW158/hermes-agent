@@ -16,6 +16,7 @@ import errno
 import json
 import logging
 import os
+import re
 import shutil
 import shlex
 import threading
@@ -479,7 +480,22 @@ def _nonempty_str(value: Any) -> bool:
 # ── Auth Store — persistence layer for ~/.hermes/auth.json ──────────────────────────────────────────
 
 def _auth_file_path() -> Path:
-    path = get_hermes_home() / "auth.json"
+    home = get_hermes_home()
+    from hermes_cli.config_effective import load_user_config_effective
+
+    auth_config = load_user_config_effective(home / "config.yaml").get("auth") or {}
+    shared_profile = auth_config.get("shared_store_profile", "") if isinstance(auth_config, dict) else ""
+    if shared_profile:
+        if not isinstance(shared_profile, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", shared_profile):
+            raise AuthError("Invalid auth.shared_store_profile")
+        # Restrict sharing to a sibling profile. A symlink cannot redirect the
+        # store outside this profile collection.
+        target_home = home.parent / shared_profile
+        if target_home.resolve(strict=False).parent != home.parent.resolve(strict=False):
+            raise AuthError("Shared auth profile escapes the profile directory")
+        path = target_home / "auth.json"
+    else:
+        path = home / "auth.json"
     # Seat belt: under pytest, refuse to touch the real user's auth store (tests that forgot to
     # monkeypatch HERMES_HOME or escaped the hermetic conftest). In production: one dict lookup.
     if (os.environ.get("PYTEST_CURRENT_TEST")
