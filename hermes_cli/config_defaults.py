@@ -21,6 +21,9 @@ LEGACY_VERCEL_RUNTIME = "node24"  # the seeded pre-49 default, never a user choi
 
 DEFAULT_CONFIG = {
     "model": "",
+    # Opt-in credential sharing between sibling profiles. Each profile still owns its
+    # config, sessions and workspace; only auth.json and its lock are shared.
+    "auth": {"shared_store_profile": ""},
     "providers": {},
     "fallback_providers": [],
     # min_switch_reset_seconds: opt-in (0 = off). When a rate-limited primary declares a reset
