@@ -516,6 +516,10 @@ def _global_auth_file_path() -> Optional[Path]:
         global_root = get_default_hermes_root()
     except Exception:
         return None
+    # An explicit sibling auth store owns this profile's credentials. Never borrow
+    # a root singleton over its account-specific credential pool.
+    if not _same_path(_auth_file_path(), get_hermes_home() / "auth.json"):
+        return None
     return None if _same_path(get_hermes_home(), global_root) else global_root / "auth.json"
 
 
