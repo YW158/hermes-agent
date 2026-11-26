@@ -216,9 +216,14 @@ class TestSpawnEnvIsolation:
     """
 
 
-    def test_spawn_env_sets_CODEX_HOME_when_provided(self, monkeypatch):
-        """CODEX_HOME isolation must still work — that's the whole point
-        of the codex_home arg."""
+    @pytest.mark.parametrize(
+        ("explicit_home", "expected_home"),
+        [(None, "/tmp/profile/codex"), ("/tmp/override/codex", "/tmp/override/codex")],
+    )
+    def test_spawn_env_restores_CODEX_HOME_after_scrub(
+        self, monkeypatch, explicit_home, expected_home
+    ):
+        """Profile Codex auth survives the child scrub; an explicit home wins."""
         import subprocess
         from agent.transports import codex_app_server as cas
 
@@ -247,14 +252,15 @@ class TestSpawnEnvIsolation:
 
         monkeypatch.setattr(subprocess, "Popen", FakePopen)
         monkeypatch.setenv("HOME", "/users/alice")
-
-        client = cas.CodexAppServerClient(
-            codex_bin="codex", codex_home="/tmp/profile/codex"
+        monkeypatch.setenv("CODEX_HOME", "/tmp/profile/codex")
+        monkeypatch.setattr(
+            cas, "hermes_subprocess_env", lambda **_kwargs: {"HOME": "/users/alice"}
         )
+
+        client = cas.CodexAppServerClient(codex_bin="codex", codex_home=explicit_home)
         client._closed = True
 
-        assert captured["env"].get("CODEX_HOME") == "/tmp/profile/codex"
-        # And HOME still passes through unchanged
+        assert captured["env"].get("CODEX_HOME") == expected_home
         assert captured["env"].get("HOME") == "/users/alice"
 
     def test_kanban_worker_adds_only_kanban_writable_root(self, monkeypatch):

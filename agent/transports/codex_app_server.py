@@ -105,8 +105,11 @@ class CodexAppServerClient:
         spawn_env = hermes_subprocess_env(inherit_credentials=True)
         if env:
             spawn_env.update(env)
-        if codex_home:
-            spawn_env["CODEX_HOME"] = codex_home
+        # The child sanitizer may drop profile-declared CODEX_HOME. Restore this
+        # non-secret path so Codex reads the account selected for this worker.
+        effective_codex_home = codex_home or spawn_env.get("CODEX_HOME") or os.environ.get("CODEX_HOME")
+        if effective_codex_home:
+            spawn_env["CODEX_HOME"] = effective_codex_home
 
         cmd = [codex_bin, "app-server", *(extra_args or [])]
         from agent.delegation_context import (
