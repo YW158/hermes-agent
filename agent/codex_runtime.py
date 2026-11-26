@@ -651,6 +651,7 @@ def _ensure_codex_session(agent, messages: list[dict[str, Any]] | None = None) -
     from agent.transports.codex_app_server_session import CodexAppServerSession, _ServerRequestRouting
     from hermes_cli.codex_runtime_switch import get_configured_codex_binary
     from hermes_cli.config import load_config
+    runtime_config = load_config()
     # Approval callback: Hermes' standard prompt flow when a CLI thread installed one. `hermes chat -q`, cron and
     # unattended platforms can have one registered with nobody to answer it, so they get none and fail closed at once.
     approval_callback = None
@@ -686,7 +687,8 @@ def _ensure_codex_session(agent, messages: list[dict[str, Any]] | None = None) -
     # so omitting it ran codex's own default instead of the selection.
     agent._codex_session = CodexAppServerSession(
         cwd=getattr(agent, "session_cwd", None) or str(resolve_agent_cwd()), approval_callback=approval_callback,
-        codex_bin=get_configured_codex_binary(load_config()),
+        codex_bin=get_configured_codex_binary(runtime_config),
+        codex_home=(runtime_config.get("model") or {}).get("codex_home") or None,
         request_routing=_ServerRequestRouting(auto_approve_exec=auto_approve_requests, auto_approve_apply_patch=auto_approve_requests),
         on_event=make_codex_app_server_event_bridge(agent),
         developer_instructions=developer_instructions or None,

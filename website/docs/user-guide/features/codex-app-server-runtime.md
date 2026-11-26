@@ -384,6 +384,17 @@ You'll need to re-run `codex login` once with that `CODEX_HOME` set so the OAuth
 
 We don't auto-scope this because moving an existing user's `~/.codex/` would silently invalidate their Codex CLI auth — anyone who already ran `codex login` would have to re-authenticate. Opt-in feels safer than surprising users.
 
+Managed workers whose launcher filters environment variables can also pin the account
+directory in the role config:
+
+    model:
+      openai_runtime: codex_app_server
+      codex_home: /home/ubuntu/.hermes/profiles/account-wei/codex
+
+The model.codex_home path is passed directly to the app-server subprocess. Set
+CODEX_HOME to the same path when running codex login or hermes codex-runtime migrate,
+so all commands use the same account directory. Several roles can share one directory.
+
 ## HOME environment variable passthrough
 
 Hermes does NOT rewrite `HOME` when spawning the codex app-server subprocess (we use `os.environ.copy()` and only overlay `CODEX_HOME` and `RUST_LOG`). This means:

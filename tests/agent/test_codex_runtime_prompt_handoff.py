@@ -48,6 +48,17 @@ def test_runtime_sends_composed_prompt_once_per_thread(monkeypatch):
     assert starts[0]["developerInstructions"] == "SOUL: you are Hermes\n\nAlways start with ZZZ"
 
 
+def test_runtime_passes_profile_codex_home(monkeypatch):
+    """A worker uses its pinned account even when CODEX_HOME is lost in a relaunch."""
+    monkeypatch.setattr(
+        "hermes_cli.config.load_config",
+        lambda: {"model": {"codex_home": "/tmp/account-wei/codex"}},
+    )
+    agent = _agent()
+    codex_runtime._ensure_codex_session(agent)
+    assert agent._codex_session._codex_home == "/tmp/account-wei/codex"
+
+
 def test_runtime_omits_prompt_when_agent_has_none(monkeypatch):
     """No cached prompt and no ephemeral additions → no developerInstructions field at all."""
     client = _FakeClient()
