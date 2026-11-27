@@ -91,7 +91,7 @@ def _build_server() -> Any:
     # Authoritative Hermes schemas so MCP clients see the same parameter docs the model does.
     all_defs = {
         td["function"]["name"]: td["function"]
-        for td in (get_tool_definitions(quiet_mode=True) or [])
+        for td in (get_tool_definitions(quiet_mode=True, skip_tool_search_assembly=True) or [])
         if isinstance(td, dict) and td.get("type") == "function"
     }
 
