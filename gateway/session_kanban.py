@@ -49,6 +49,21 @@ def build_kanban_policy(connection, params, config):
         raise AuthorityRefusal('invalid_kanban_claim') from exc
     cwd = task.workspace_path
     private = {}
+    from hermes_cli.kanban_codex_account import PROVIDER_PREFIX, account_home
+
+    provider_override = task.provider_override or ''
+    account = None
+    if provider_override.startswith(PROVIDER_PREFIX):
+        if board != (config.get('kanban') or {}).get('codex_account_board'):
+            raise AuthorityRefusal('invalid_params', field='provider')
+        account = provider_override.removeprefix(PROVIDER_PREFIX)
+        try:
+            home = account_home(Path(authority.profile_id).parent, account)
+        except ValueError as exc:
+            raise AuthorityRefusal('invalid_params', field='provider') from exc
+        if not (home / 'auth.json').is_file() or not (home / 'codex/auth.json').is_file():
+            raise AuthorityRefusal('invalid_params', field='provider', detail='Codex account login is missing')
+        task = replace(task, provider_override='openai-codex')
     policy = kanban_launch_policy(task, cwd, config, private)
     context = dict(params, workspace=cwd, branch=task.branch_name, tenant=task.tenant,
         profile=task.assignee, workspaces_root=str(kb.workspaces_root(board=board).resolve()),
@@ -56,6 +71,8 @@ def build_kanban_policy(connection, params, config):
         goal_text='\n\n'.join(p for p in (task.title, task.body) if p), context=context,
         max_runtime_seconds=task.max_runtime_seconds, accept_hooks=True)
     context['db'] = str(path)
+    if account:
+        context['codex_account'] = account
     request = json.loads(policy.request_json)
     request.update(source='kanban', board=board, task_id=task.id, run_id=task.current_run_id)
     return replace(policy, source='kanban', platform='cli', toolsets=tuple(sorted(set(policy.toolsets) | {'kanban'})),
@@ -211,6 +228,11 @@ def bind_worker_context(frame):
     if isinstance(expires, int) and claimed[1]:
         env['HERMES_KANBAN_CLAIM_TTL_SECONDS'] = str(max(1, expires - int(claimed[1])))
     _watch_submitter(Path(context['db']), context['run_id'])
+    from hermes_cli.kanban_codex_account import ACCOUNT_ENV
+
+    os.environ.pop(ACCOUNT_ENV, None)
+    if context.get('codex_account'):
+        env[ACCOUNT_ENV] = context['codex_account']
     os.environ.update(env)
     os.chdir(context['workspace'])
 

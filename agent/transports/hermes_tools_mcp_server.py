@@ -113,8 +113,14 @@ def _build_server() -> Any:
         _dispatch.__annotations__ = {**annots, "return": str}
         return _dispatch
 
+    from agent.delegation_context import owned_kanban_task
+
+    exposed_tools = EXPOSED_TOOLS
+    if owned_kanban_task():
+        # Registered by the profile's opt-in Factory plugin. The handler validates the claim.
+        exposed_tools += ("factory_bridge",)
     exposed_count = 0
-    for name in EXPOSED_TOOLS:
+    for name in exposed_tools:
         spec = all_defs.get(name)
         if spec is None:
             logger.debug("skipping %s — not registered in this Hermes process", name)
@@ -128,7 +134,7 @@ def _build_server() -> Any:
             mcp.tool(name=name, description=description)(_make_handler(name, params_schema, description))
         exposed_count += 1
 
-    logger.info("hermes-tools MCP server registered %d/%d tools", exposed_count, len(EXPOSED_TOOLS))
+    logger.info("hermes-tools MCP server registered %d/%d tools", exposed_count, len(exposed_tools))
     return mcp
 
 

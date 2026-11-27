@@ -485,7 +485,11 @@ def _auth_file_path() -> Path:
 
     auth_config = load_user_config_effective(home / "config.yaml").get("auth") or {}
     shared_profile = auth_config.get("shared_store_profile", "") if isinstance(auth_config, dict) else ""
-    if shared_profile:
+    from hermes_cli.kanban_codex_account import active_account_home
+
+    if account := active_account_home():
+        path = account / "auth.json"
+    elif shared_profile:
         if not isinstance(shared_profile, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}", shared_profile):
             raise AuthError("Invalid auth.shared_store_profile")
         # Restrict sharing to a sibling profile. A symlink cannot redirect the
