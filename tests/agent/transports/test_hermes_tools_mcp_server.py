@@ -137,3 +137,27 @@ class TestMain:
         monkeypatch.setattr(m, "_build_server", lambda: CrashingServer())
         rc = m.main([])
         assert rc == 1
+
+
+def test_callback_discovers_raw_plugin_tools(monkeypatch):
+    import sys
+    from types import ModuleType
+    import model_tools
+    from agent.transports.hermes_tools_mcp_server import _build_server
+
+    class Server:
+        def __init__(self, *args, **kwargs):
+            self.tools = []
+        def add_tool(self, handler, *, name, description):
+            self.tools.append(name)
+
+    server_module = ModuleType("mcp.server")
+    server_module.MCPServer = Server
+    monkeypatch.setitem(sys.modules, "mcp.server", server_module)
+    monkeypatch.setattr("agent.delegation_context.owned_kanban_task", lambda: "owned")
+    def definitions(**kwargs):
+        if not kwargs.get("skip_tool_search_assembly"):
+            return [{"type": "function", "function": {"name": "tool_search"}}]
+        return [{"type": "function", "function": {"name": "factory_bridge", "parameters": {}}}]
+    monkeypatch.setattr(model_tools, "get_tool_definitions", definitions)
+    assert "factory_bridge" in _build_server().tools
