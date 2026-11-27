@@ -652,6 +652,9 @@ def _ensure_codex_session(agent, messages: list[dict[str, Any]] | None = None) -
     from hermes_cli.codex_runtime_switch import get_configured_codex_binary
     from hermes_cli.config import load_config
     runtime_config = load_config()
+    from hermes_cli.kanban_codex_account import active_account_home
+
+    account = active_account_home()
     # Approval callback: Hermes' standard prompt flow when a CLI thread installed one. `hermes chat -q`, cron and
     # unattended platforms can have one registered with nobody to answer it, so they get none and fail closed at once.
     approval_callback = None
@@ -688,7 +691,8 @@ def _ensure_codex_session(agent, messages: list[dict[str, Any]] | None = None) -
     agent._codex_session = CodexAppServerSession(
         cwd=getattr(agent, "session_cwd", None) or str(resolve_agent_cwd()), approval_callback=approval_callback,
         codex_bin=get_configured_codex_binary(runtime_config),
-        codex_home=(runtime_config.get("model") or {}).get("codex_home") or None,
+        codex_home=(str(account / "codex") if account
+                    else (runtime_config.get("model") or {}).get("codex_home") or None),
         request_routing=_ServerRequestRouting(auto_approve_exec=auto_approve_requests, auto_approve_apply_patch=auto_approve_requests),
         on_event=make_codex_app_server_event_bridge(agent),
         developer_instructions=developer_instructions or None,

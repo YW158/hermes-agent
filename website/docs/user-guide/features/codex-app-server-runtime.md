@@ -395,6 +395,16 @@ The model.codex_home path is passed directly to the app-server subprocess. Set
 CODEX_HOME to the same path when running codex login or hermes codex-runtime migrate,
 so all commands use the same account directory. Several roles can share one directory.
 
+## Kanban cards with an account profile
+
+An administrator can set **kanban.codex_account_board** to one board slug in a shared
+worker profile. The profile should enable **model.openai_runtime** with value
+**codex_app_server**. On that board, a card with a model override may select the
+provider **openai-codex:account-NAME**. The account must be a sibling profile with
+Hermes OAuth and Codex CLI logins. Hermes binds the account after validating the
+Kanban claim and uses that account's Codex home for the managed worker session.
+Cards without an account override keep their existing routing.
+
 ## HOME environment variable passthrough
 
 Hermes does NOT rewrite `HOME` when spawning the codex app-server subprocess (we use `os.environ.copy()` and only overlay `CODEX_HOME` and `RUST_LOG`). This means:

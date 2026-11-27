@@ -147,3 +147,61 @@ def test_claim_reclaimed_before_admission_marker_is_refused(tmp_path, monkeypatc
     assert calls == []
     with closing(connect(board='owned')) as conn:
         assert conn.execute("SELECT count(*) FROM task_events WHERE task_id=? AND kind='owner_admitted'", (task_id,)).fetchone()[0] == 0
+
+
+def test_claim_pins_codex_account_with_shared_role(tmp_path, monkeypatch):
+    from hermes_cli import kanban_db as kb
+    from hermes_cli.kanban_db_connect import connect
+    from gateway.session_contract import SessionActor
+    from persistence.core.errors import AuthorityRefusal
+    monkeypatch.setenv('HERMES_KANBAN_HOME', str(tmp_path))
+    monkeypatch.setenv('HERMES_HOME', str(tmp_path))
+    monkeypatch.setenv('HOME', str(tmp_path / 'home'))
+    monkeypatch.delenv('HERMES_KANBAN_DB', raising=False)
+    monkeypatch.delenv('HERMES_DELEGATED_CHILD', raising=False)
+    monkeypatch.setattr('hermes_cli.profiles.resolve_profile_env', lambda name: str(tmp_path) if name == 'default' else str(tmp_path / name))
+    workspace = tmp_path / 'workspace'
+    workspace.mkdir()
+    (workspace / 'pyproject.toml').write_text('[project]\nname = "task"\n')  # a code worktree
+    from contextlib import closing
+    kb.create_board('owned')  # explicit creation; connect() never creates a board (#43243)
+    with closing(connect(board='owned')) as conn:
+        task_id = kb.create_task(conn, title='Owned acceptance', body='Goal criteria', assignee='default',
+            workspace_kind='dir', workspace_path=str(workspace), skills=['owned-skill'], goal_mode=True,
+            goal_max_turns=3, model_override='loop-model', provider_override='custom')
+        kb.recompute_ready(conn)
+        task = kb.claim_task(conn, task_id)
+    actor = SessionActor('owner', str(tmp_path), frozenset({'session:create'}), 'transport')
+    connection = SimpleNamespace(authority=SimpleNamespace(profile_id=str(tmp_path)), actor=actor, native_owner=True)
+    params = dict(board='owned', task_id=task.id, run_id=task.current_run_id, claim_lock=task.claim_lock)
+    from gateway.session_kanban import build_kanban_policy
+    config = {'model': {'default': 'loop-model', 'provider': 'custom'}, 'platform_toolsets': {'cli': ['terminal', 'file']},
+              'agent': {'coding_context': 'focus'}}  # the worktree must not collapse a worker into the coding posture
+    account = tmp_path.parent / 'account-wei'
+    account.mkdir(exist_ok=True)
+    (account / 'codex').mkdir(exist_ok=True)
+    (account / 'auth.json').write_text('{}')
+    (account / 'codex/auth.json').write_text('{}')
+    with closing(connect(board='owned')) as conn:
+        kb.set_model_override(conn, task.id, 'gpt-6.2-sol', provider='openai-codex:account-wei')
+    config['kanban'] = {'codex_account_board': 'owned'}
+    config['model']['openai_runtime'] = 'codex_app_server'
+    policy, _secrets = build_kanban_policy(connection, params, config)
+    context = json.loads(policy.kanban_json)
+    assert policy.source == 'kanban' and policy.cwd == str(workspace)
+    assert policy.model == 'gpt-6.2-sol' and policy.provider == 'openai-codex'
+    assert context['codex_account'] == 'account-wei'
+    assert {'kanban', 'terminal', 'file'} <= set(policy.toolsets)
+    assert context['task_id'] == task.id and context['run_id'] == task.current_run_id
+    assert context['board'] == 'owned' and context['claim_lock'] == task.claim_lock
+    assert context['skills'] == ['owned-skill'] and context['goal_mode'] and context['goal_max_turns'] == 3
+    assert context['accept_hooks'] is True and 'Goal criteria' in context['goal_text']
+    for changed in ({'run_id': task.current_run_id + 1}, {'board': 'foreign'}, {'claim_lock': 'forged'}, {'cwd': '/tmp'}):
+        with pytest.raises(AuthorityRefusal):
+            build_kanban_policy(connection, params | changed, config)
+    connection.native_owner = False
+    with pytest.raises(AuthorityRefusal, match='permission_denied'):
+        build_kanban_policy(connection, params, config)
+    from gateway.session_policy import build_policy
+    with pytest.raises(AuthorityRefusal, match='invalid_params'):
+        build_policy({'source': 'kanban', 'cwd': str(workspace)}, config)
